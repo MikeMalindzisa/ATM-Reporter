@@ -105,7 +105,7 @@ def process_file(file_path):
             log_message(
                 f"########################## FILE IN TASK: {os.path.basename(file_path)} >> STARTED << ##############################")
             log_message(
-                f"\nProcessing new source file.\nSOURCE FILE NAME  >> {os.path.basename(file_path)}\nSOURCES HOME >> {SOURCE_FOLDER}\n")
+                f"Processing new source file.\nSOURCE FILE NAME  >> {os.path.basename(file_path)}\nSOURCES HOME >> {SOURCE_FOLDER}\n")
 
             with open(file_path, "r") as file:
                 content = file.read()
@@ -127,7 +127,7 @@ def process_file(file_path):
 
                 os.rename(file_path, completed_path)
                 log_message(
-                    f"Archeved processed file: \nARCHIVED FILE NAME  >> {os.path.basename(file_path)}\nARCHIVES HOME >> {COMPLETED_FOLDER}\n")
+                    f"Archived processed file: \nARCHIVED FILE NAME  >> {os.path.basename(file_path)}\nARCHIVES HOME >> {COMPLETED_FOLDER}\n")
                 log_message(
                     f"########################## FILE IN TASK: {os.path.basename(file_path)} >> COMPLETED << ##############################\n")
 
