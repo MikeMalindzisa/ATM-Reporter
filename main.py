@@ -1,6 +1,9 @@
+import configparser
+import itertools
 import logging
 import os
 import re
+import sys
 import time
 
 import pandas as pd
@@ -12,13 +15,56 @@ from pystray import MenuItem
 from watchdog.events import FileSystemEventHandler
 from watchdog.observers import Observer
 
-log_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), "sys_log.log")
+log_file = "sys_log.log"
 logging.basicConfig(filename=log_file, level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
-WATCH_FOLDER = os.path.dirname(os.path.abspath(__file__))
-SOURCE_FOLDER = os.path.join(WATCH_FOLDER, "source")
-COMPLETED_FOLDER = os.path.join(WATCH_FOLDER, "completed")
-REPORTS_FOLDER = os.path.join(WATCH_FOLDER, "reports")
+# Get the path to the INI file
+ini_path = 'std-settings.ini'
+
+# Create a ConfigParser instance
+config = configparser.ConfigParser()
+
+# Check if the INI file exists
+if os.path.exists(ini_path):
+    # Read the INI file
+    config.read(ini_path)
+else:
+    # Create default folder names
+    sources_folder_name = 'source'
+    reports_folder_name = 'reports'
+    completed_folder_name = 'completed'
+
+    # Create default folder paths based on the current working directory
+    WATCH_FOLDER = sources_folder_name
+    REPORTS_FOLDER = reports_folder_name
+    COMPLETED_FOLDER = completed_folder_name
+
+    # Create the default directories if they don't exist
+    os.makedirs(WATCH_FOLDER, exist_ok=True)
+    os.makedirs(REPORTS_FOLDER, exist_ok=True)
+    os.makedirs(COMPLETED_FOLDER, exist_ok=True)
+
+    # Set the folder paths in the ConfigParser instance
+    config['Folders'] = {
+        'InputFolder': WATCH_FOLDER,
+        'OutputFolder': REPORTS_FOLDER,
+        'CompletedFolder': COMPLETED_FOLDER,
+    }
+
+    # Write the ConfigParser instance to the INI file
+    with open(ini_path, 'w') as config_file:
+        config.write(config_file)
+
+# Read the folder paths from the INI file
+SOURCE_FOLDER = config.get('Folders', 'InputFolder')
+REPORTS_FOLDER = config.get('Folders', 'OutputFolder')
+COMPLETED_FOLDER = config.get('Folders', 'CompletedFolder')
+
+# Create the folders if they don't exist
+os.makedirs(SOURCE_FOLDER, exist_ok=True)
+os.makedirs(REPORTS_FOLDER, exist_ok=True)
+os.makedirs(COMPLETED_FOLDER, exist_ok=True)
+
 atm_section_pattern = re.compile(r"UPTIME TOTALS FOR ATM (\d+)")
 
 
@@ -29,11 +75,6 @@ def minimize_console():
 
 def log_message(message):
     logging.info(message)
-
-
-for folder in [SOURCE_FOLDER, COMPLETED_FOLDER, REPORTS_FOLDER]:
-    if not os.path.exists(folder):
-        os.makedirs(folder, mode=0o755)
 
 
 def parse_uptime_data(data):
@@ -74,7 +115,8 @@ def parse_uptime_data(data):
         if "Online" in line:
             columns = line.split()
             uptime_percent = columns[3]
-            continue
+        if "ACCUMULATED UPTIME TOTALS FOR *ALL* ATMS" in line:
+            break
 
         if "No totals received from ATM" in line:
             downtime_reasons.append(f"No Totals Received For ATM-{atm_id}")
@@ -158,17 +200,33 @@ class MyHandler(FileSystemEventHandler):
             process_file(event.src_path)
 
 
-# minimize_console()
+minimize_console()
+
+
+def is_another_instance_running():
+    # Create a lock file to ensure only one instance can run
+    lock_file = "program.lock"
+    if os.path.exists(lock_file):
+        return True
+    else:
+        with open(lock_file, "w") as f:
+            f.write(str(os.getpid()))
+        return False
 
 
 def menu_exit_callback(icon, item):
     log_message("ATM Reporter Closed.")
     icon.stop()
+    os.remove("program.lock")
     os._exit(0)
 
 
 def show_reports_folder():
     os.startfile(REPORTS_FOLDER)
+
+
+def show_log_file():
+    os.startfile(log_file)
 
 
 def setup_tray_icon():
@@ -178,6 +236,7 @@ def setup_tray_icon():
         title = "ATM Reporter"
         menu = (
             MenuItem('Reports', show_reports_folder),
+            MenuItem('View Log', show_log_file),
             MenuItem('Exit', menu_exit_callback)
         )
         icon = pystray.Icon("Mike", image, "ATM Reporter", menu)
@@ -188,10 +247,19 @@ def setup_tray_icon():
         return None
 
 
+def main():
+    if is_another_instance_running():
+        log_message("Another instance is already running. Exiting.")
+        os._exit(0)
+        return
+
+
 if __name__ == "__main__":
+    main()
     icon = setup_tray_icon()
     if icon is None:
         log_message("Exiting due to tray icon setup error.")
+        os.remove("program.lock")
     else:
         observer = Observer()
         event_handler = MyHandler()
@@ -206,5 +274,6 @@ if __name__ == "__main__":
         except KeyboardInterrupt:
             observer.stop()
             icon.stop()
+            os.remove("program.lock")
 
         observer.join()
